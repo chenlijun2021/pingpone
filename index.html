@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Ping-Pong Epistle - Flat Generative Art</title>
+    <!-- Tailwind CSS for modern responsive UI layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Source Han Sans CN", "Microsoft YaHei", sans-serif;
+            overflow: hidden;
+            margin: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            background-color: #0b0f19;
+        }
+
+        /* Premium Glassmorphism Panel */
+        .glass-ui {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel-transition {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Custom Scrollbar for Textareas */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen flex items-center justify-center relative">
+
+    <!-- Crisp Vector Canvas with High-DPI support -->
+    <div class="absolute inset-0 z-0 flex items-center justify-center overflow-hidden">
+        <canvas id="artCanvas" class="w-full h-full block"></canvas>
+    </div>
+
+    <!-- Minimalist Toggle Button -->
+    <button id="togglePanelBtn" class="absolute top-6 right-6 z-20 w-10 h-10 rounded-full flex items-center justify-center glass-ui hover:bg-white/10 active:scale-95 transition-all text-white/80 hover:text-white" title="Toggle Control Panel">
+        <i data-lucide="sliders" class="w-5 h-5"></i>
+    </button>
+
+    <!-- Art Configurator Panel -->
+    <div id="controlPanel" class="absolute top-20 right-6 z-20 w-80 glass-ui rounded-2xl p-5 panel-transition opacity-100 translate-y-0 flex flex-col gap-4 max-h-[85vh] overflow-y-auto custom-scrollbar text-slate-200">
+        <div class="flex justify-between items-center border-b border-white/10 pb-2">
+            <h3 class="text-xs font-bold tracking-wider uppercase text-white/90">Art Settings</h3>
+            <span class="text-[9px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">VECTOR</span>
+        </div>
+
+        <div class="space-y-4 text-xs">
+            <!-- Table Dimension Controller -->
+            <div class="flex flex-col gap-1">
+                <div class="flex justify-between text-white/60">
+                    <span>乒乓球桌宽度 (Table Width)</span>
+                    <span id="tableWidthVal" class="font-mono text-emerald-400">350px</span>
+                </div>
+                <input type="range" id="tableWidth" min="250" max="650" step="5" value="350" class="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-emerald-400">
+            </div>
+
+            <!-- Background Color Picker -->
+            <div class="flex flex-col gap-1.5">
+                <span class="text-white/60">背景颜色 (Background Color)</span>
+                <div class="flex gap-2">
+                    <button class="bg-picker w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110" data-color="#0b0f19" style="background-color: #0b0f19;"></button>
+                    <button class="bg-picker w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110" data-color="#180f2b" style="background-color: #180f2b;"></button>
+                    <button class="bg-picker w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110" data-color="#06121e" style="background-color: #06121e;"></button>
+                    <input type="color" id="bgColorPicker" value="#0b0f19" class="w-6 h-6 p-0 bg-transparent border-0 cursor-pointer rounded overflow-hidden">
+                </div>
+            </div>
+
+            <!-- Table Color Picker -->
+            <div class="flex flex-col gap-1.5">
+                <span class="text-white/60">球桌颜色 (Table Color)</span>
+                <div class="flex gap-2">
+                    <button class="table-picker w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110" data-color="#0e5a8a" style="background-color: #0e5a8a;"></button>
+                    <button class="table-picker w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110" data-color="#134e5e" style="background-color: #134e5e;"></button>
+                    <button class="table-picker w-6 h-6 rounded-full border border-white/10 transition-transform hover:scale-110" data-color="#581c87" style="background-color: #581c87;"></button>
+                    <input type="color" id="tableColorPicker" value="#0e5a8a" class="w-6 h-6 p-0 bg-transparent border-0 cursor-pointer rounded overflow-hidden">
+                </div>
+            </div>
+
+            <!-- Character Color Pickers -->
+            <div class="flex flex-col gap-1.5">
+                <span class="text-white/60">文字颜色设置 (Text Colors)</span>
+                <div class="flex gap-4 items-center">
+                    <div class="flex items-center gap-1">
+                        <input type="color" id="charColorPicker" value="#ffffff" class="w-6 h-6 p-0 bg-transparent border-0 cursor-pointer rounded overflow-hidden">
+                        <span class="text-[10px] text-white/50">普通 (Idle)</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <input type="color" id="charActiveColorPicker" value="#fde047" class="w-6 h-6 p-0 bg-transparent border-0 cursor-pointer rounded overflow-hidden">
+                        <span class="text-[10px] text-white/50">飘散 (Active)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ball Speed Controller -->
+            <div class="flex flex-col gap-1">
+                <div class="flex justify-between text-white/60">
+                    <span>速度上限 (Ball Speed)</span>
+                    <span id="speedVal" class="font-mono text-emerald-400">12.0</span>
+                </div>
+                <input type="range" id="ballSpeed" min="6" max="25" step="0.5" value="12" class="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-emerald-400">
+            </div>
+
+            <!-- Ball Size Controller -->
+            <div class="flex flex-col gap-1">
+                <div class="flex justify-between text-white/60">
+                    <span>乒乓球大小 (Ball Size)</span>
+                    <span id="radiusVal" class="font-mono text-emerald-400">8.0px</span>
+                </div>
+                <input type="range" id="ballRadius" min="4" max="24" step="0.5" value="8" class="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-emerald-400">
+            </div>
+
+            <!-- Editable Letter Textareas -->
+            <div class="flex flex-col gap-1">
+                <span class="text-white/60">上半桌信件文字 (Top Paragraph)</span>
+                <textarea id="textTopInput" rows="4" class="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 text-[10px] focus:outline-none focus:border-emerald-400 custom-scrollbar resize-none leading-relaxed"></textarea>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <span class="text-white/60">下半桌信件文字 (Bottom Paragraph)</span>
+                <textarea id="textBottomInput" rows="4" class="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white/90 text-[10px] focus:outline-none focus:border-emerald-400 custom-scrollbar resize-none leading-relaxed"></textarea>
+            </div>
+
+            <!-- Action Buttons -->
+            <button id="applyTextBtn" class="w-full py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold rounded-lg transition-all active:scale-[0.98]">
+                应用并重置 (Apply Changes)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Init Lucide Icons
+        lucide.createIcons();
+
+        // App state variables
+        const state = {
+            bgColor: '#0b0f19',
+            tableColor: '#0e5a8a',
+            charColor: '#ffffff',
+            charActiveColor: '#fde047',
+            ballSpeed: 12,
+            tableWidth: 350,
+            ballRadius: 8,
+            panelVisible: true,
+            // Slender and elegant default letters from a kid to Shasha
+            textTop: "亲爱的莎莎姐姐：\n每当在电视机前看到你握紧球拍、眼神专注的样子，我都会忍不住为你欢呼。你的正手拉球像闪电一样快，每一次绝境中微笑着挥拍，都深深鼓舞着我。你是我心中最闪亮的超级英雄。",
+            textBottom: "在平时的训练里，每当我觉得累了、想要放弃的时候，爸爸就会告诉我要学习你的坚韧与勇敢。我会一直努力练习，带着对乒乓球的热爱坚持下去。希望有一天，我也能像你一样为国争光。祝你每天都开开心心！\n—— 崇拜你的小球手"
+        };
+
+        // Populate initial textareas
+        document.getElementById('textTopInput').value = state.textTop;
+        document.getElementById('textBottomInput').value = state.textBottom;
+
+        const canvas = document.getElementById('artCanvas');
+        const ctx = canvas.getContext('2d');
+        const togglePanelBtn = document.getElementById('togglePanelBtn');
+        const controlPanel = document.getElementById('controlPanel');
+        const bgColorPicker = document.getElementById('bgColorPicker');
+        const tableColorPicker = document.getElementById('tableColorPicker');
+        const charColorPicker = document.getElementById('charColorPicker');
+        const charActiveColorPicker = document.getElementById('charActiveColorPicker');
+        const ballSpeedSlider = document.getElementById('ballSpeed');
+        const speedValSpan = document.getElementById('speedVal');
+        const ballRadiusSlider = document.getElementById('ballRadius');
+        const radiusValSpan = document.getElementById('radiusVal');
+        const tableWidthSlider = document.getElementById('tableWidth');
+        const tableWidthValSpan = document.getElementById('tableWidthVal');
+        const applyTextBtn = document.getElementById('applyTextBtn');
+
+        // Flat Table Geometry configuration
+        let tableGeo = {
+            width: 0,
+            height: 0,
+            x: 0,
+            y: 0,
+            ratio: 1.8 // Strict vertical ratio
+        };
+
+        function resizeCanvas() {
+            // Read visual client dimensions
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Adjust canvas backing store size to ensure crisp retina graphics
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            
+            // Normalize scale factor
+            ctx.resetTransform();
+            ctx.scale(dpr, dpr);
+            
+            calculateTableDimensions(rect.width, rect.height);
+            initLetterText();
+        }
+
+        function calculateTableDimensions(winWidth, winHeight) {
+            // Strictly follow tableWidth input, adjust constraints based on viewport
+            let w = Math.min(state.tableWidth, winWidth - 40);
+            let h = w * tableGeo.ratio;
+
+            if (h > winHeight - 60) {
+                h = winHeight - 60;
+                w = h / tableGeo.ratio;
+            }
+
+            tableGeo.width = w;
+            tableGeo.height = h;
+            tableGeo.x = (winWidth - w) / 2;
+            tableGeo.y = (winHeight - h) / 2;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // ========================================================
+        // ========================================================
+        let characters = []; // Stores single character metadata
+
+        function initLetterText() {
+            characters = [];
+            const margin = tableGeo.width * 0.08; // Clean margins inside table
+            const drawWidth = tableGeo.width - margin * 2;
+            
+            // Dynamically scale font size according to current table width
+            const fontSize = Math.max(10, Math.min(tableGeo.width / 22, 14));
+            
+            // Strictly apply ultra-thin typography (font-weight: 200)
+            ctx.font = `normal 200 ${fontSize}px system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif`;
+            const lineHeight = fontSize * 1.5;
+
+            // Render top paragraph block (0.05 to 0.43 of table height)
+            layoutUniversalParagraph(state.textTop, tableGeo.y + tableGeo.height * 0.05, tableGeo.y + tableGeo.height * 0.43, fontSize, lineHeight, margin, drawWidth);
+
+            // Render bottom paragraph block (0.57 to 0.95 of table height)
+            layoutUniversalParagraph(state.textBottom, tableGeo.y + tableGeo.height * 0.57, tableGeo.y + tableGeo.height * 0.95, fontSize, lineHeight, margin, drawWidth);
+        }
+
+        // Beautiful mixed Chinese & English wrapping algorithm with full justification
+        function layoutUniversalParagraph(textStr, topLimit, bottomLimit, fontSize, lineHeight, margin, drawWidth) {
+            const paragraphs = textStr.split('\n');
+            let currentY = topLimit;
+
+            paragraphs.forEach(para => {
+                if (currentY + lineHeight > bottomLimit) return;
+                if (para.trim() === "") {
+                    currentY += lineHeight * 0.5;
+                    return;
+                }
+
+                // High precision Tokenization: Split Chinese characters and English words dynamically
+                const tokens = [];
+                const regex = /[\u4e00-\u9fa5]|[a-zA-Z0-9']+|[^\s\w\u4e00-\u9fa5]|\s+/g;
+                let match;
+                while ((match = regex.exec(para)) !== null) {
+                    tokens.push(match[0]);
+                }
+
+                let lines = [];
+                let currentLineTokens = [];
+                let currentLineWidth = 0;
+
+                tokens.forEach(token => {
+                    // Skip leading empty space tokens on fresh line lines
+                    if (currentLineTokens.length === 0 && token.trim() === '') return;
+
+                    const tokenWidth = ctx.measureText(token).width;
+                    if (currentLineWidth + tokenWidth > drawWidth && currentLineTokens.length > 0) {
+                        lines.push({ tokens: currentLineTokens, isLast: false });
+                        currentLineTokens = [token];
+                        currentLineWidth = tokenWidth;
+                    } else {
+                        currentLineTokens.push(token);
+                        currentLineWidth += tokenWidth;
+                    }
+                });
+                if (currentLineTokens.length > 0) {
+                    lines.push({ tokens: currentLineTokens, isLast: true });
+                }
+
+                // Layout words character-by-character for justified alignment inside safe bounds
+                lines.forEach(lineObj => {
+                    if (currentY + fontSize > bottomLimit) return;
+
+                    const lineTokens = lineObj.tokens;
+                    const isLast = lineObj.isLast;
+                    const startX = tableGeo.x + margin;
+
+                    // Clean out pure spaces for accurate justification alignment
+                    const visibleTokens = lineTokens.filter(t => t.trim() !== '');
+                    if (visibleTokens.length === 0) return;
+
+                    let totalWordsWidth = 0;
+                    visibleTokens.forEach(token => {
+                        totalWordsWidth += ctx.measureText(token).width;
+                    });
+                    const extraSpace = drawWidth - totalWordsWidth;
+
+                    if (isLast || visibleTokens.length === 1) {
+                        // Regular left-aligned spacing for the last line
+                        let currentX = startX;
+                        visibleTokens.forEach(token => {
+                            for (let i = 0; i < token.length; i++) {
+                                const char = token[i];
+                                const charW = ctx.measureText(char).width;
+                                characters.push(createCharacterObject(char, currentX + charW / 2, currentY + fontSize / 2, fontSize));
+                                currentX += charW;
+                            }
+                            // Add standard spacing between tokens
+                            currentX += ctx.measureText(' ').width * 0.5;
+                        });
+                    } else {
+                        // Perfectly calculated word space distribution (Justified)
+                        const spaceBetweenTokens = extraSpace / (visibleTokens.length - 1);
+                        let currentX = startX;
+
+                        visibleTokens.forEach((token, tokenIdx) => {
+                            for (let i = 0; i < token.length; i++) {
+                                const char = token[i];
+                                const charW = ctx.measureText(char).width;
+                                characters.push(createCharacterObject(char, currentX + charW / 2, currentY + fontSize / 2, fontSize));
+                                currentX += charW;
+                            }
+                            if (tokenIdx < visibleTokens.length - 1) {
+                                currentX += spaceBetweenTokens;
+                            }
+                        });
+                    }
+                    currentY += lineHeight;
+                });
+                currentY += lineHeight * 0.3; // Paragraph gap
+            });
+        }
+
+        function createCharacterObject(char, x, y, size) {
+            return {
+                char: char,
+                origX: x,
+                origY: y,
+                x: x,
+                y: y,
+                fontSize: size,
+                
+                // Dandelion Particle states
+                state: 'STATIC', // 'STATIC' | 'SCATTERED' | 'RETURNING'
+                vx: 0,
+                vy: 0,
+                angle: 0,
+                angularVelocity: 0,
+                scatterTimer: 0,
+                returnProgress: 0,
+                randomWindOffset: Math.random() * 100 // Phase offset for sine wind
+            };
+        }
+
+        // ========================================================
+        // ========================================================
+        let ball = {
+            x: 0,
+            y: 0,
+            vx: 0,
+            vy: 0,
+            z: 0,           // Z height for simulated overhead flat parabolic scaling
+            radius: 8,
+            scale: 1,       // Flat visual scale multiplier
+            
+            state: 'GOING_UP',
+            bounceY: 0,     // Pre-designated exactly-once bounce target
+            hasBouncedThisPass: false
+        };
+
+        function resetBall() {
+            // Ball originates far below the bottom viewport border
+            ball.radius = state.ballRadius;
+            ball.x = tableGeo.x + tableGeo.width / 2;
+            ball.y = window.innerHeight + 150;
+            ball.vy = -state.ballSpeed;
+            
+            // Aim rebound direction slightly towards middle area of upper screen
+            ball.vx = (Math.random() - 0.5) * 4;
+            ball.state = 'GOING_UP';
+            ball.hasBouncedThisPass = false;
+            
+            // Mark the unique table bounce point on the upper half
+            ball.bounceY = tableGeo.y + tableGeo.height * 0.15 + Math.random() * (tableGeo.height * 0.25);
+            ball.z = 15;
+        }
+
+        function updateBallPhysics() {
+            // Pure linear movement updates (No left/right horizontal bounds, free drift!)
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+
+            // Vertical 3D parabola simulation (Represented purely by 2D scaling & shadows)
+            if (ball.state === 'GOING_UP') {
+                const triggerOffscreenTop = -150; // Fly completely outside the screen top
+                const startY = window.innerHeight + 150; // Fly completely outside the screen bottom
+                const targetY = ball.bounceY;
+
+                if (!ball.hasBouncedThisPass) {
+                    // Flight phase 1: from strike to table landing point
+                    const progress = Math.max(0, Math.min(1, (ball.y - startY) / (targetY - startY)));
+                    const heightFactor = Math.max(0, -4 * Math.pow(progress - 0.5, 2) + 1);
+                    ball.z = heightFactor * 30; // Max height above table
+                } else {
+                    // Flight phase 2: from table bounce to hitting out of bounds
+                    const progress = Math.max(0, Math.min(1, (ball.y - targetY) / (triggerOffscreenTop - targetY)));
+                    const heightFactor = Math.max(0, -4 * Math.pow(progress - 0.5, 2) + 1);
+                    ball.z = heightFactor * 30;
+                }
+
+                // Detect precise single landing point on upper half
+                if (!ball.hasBouncedThisPass && ball.y <= ball.bounceY) {
+                    ball.z = 0;
+                    ball.hasBouncedThisPass = true;
+                    triggerDandelionImpact(ball.x, ball.y);
+                }
+
+                // Rebound off top outer limits (Completely outside visual layout)
+                if (ball.y < triggerOffscreenTop) {
+                    ball.y = triggerOffscreenTop;
+                    ball.vy = state.ballSpeed;
+                    
+                    // Steer ball smoothly back towards the table center line to maintain active game view
+                    const centerOffset = (tableGeo.x + tableGeo.width / 2) - ball.x;
+                    ball.vx = centerOffset * 0.008 + (Math.random() - 0.5) * 3;
+                    
+                    ball.state = 'GOING_DOWN';
+                    ball.hasBouncedThisPass = false;
+                    // Pre-designate exactly one bottom bounce point
+                    ball.bounceY = tableGeo.y + tableGeo.height * 0.6 + Math.random() * (tableGeo.height * 0.25);
+                }
+            } 
+            else if (ball.state === 'GOING_DOWN') {
+                const triggerOffscreenBottom = window.innerHeight + 150; // Fly completely outside the screen bottom
+                const startY = -150; // Fly completely outside the screen top
+                const targetY = ball.bounceY;
+
+                if (!ball.hasBouncedThisPass) {
+                    const progress = Math.max(0, Math.min(1, (ball.y - startY) / (targetY - startY)));
+                    const heightFactor = Math.max(0, -4 * Math.pow(progress - 0.5, 2) + 1);
+                    ball.z = heightFactor * 30;
+                } else {
+                    const progress = Math.max(0, Math.min(1, (ball.y - targetY) / (triggerOffscreenBottom - targetY)));
+                    const heightFactor = Math.max(0, -4 * Math.pow(progress - 0.5, 2) + 1);
+                    ball.z = heightFactor * 30;
+                }
+
+                // Bottom table landing bounce
+                if (!ball.hasBouncedThisPass && ball.y >= ball.bounceY) {
+                    ball.z = 0;
+                    ball.hasBouncedThisPass = true;
+                    triggerDandelionImpact(ball.x, ball.y);
+                }
+
+                // Rebound off bottom outer limits
+                if (ball.y > triggerOffscreenBottom) {
+                    ball.y = triggerOffscreenBottom;
+                    ball.vy = -state.ballSpeed;
+                    
+                    const centerOffset = (tableGeo.x + tableGeo.width / 2) - ball.x;
+                    ball.vx = centerOffset * 0.008 + (Math.random() - 0.5) * 3;
+                    
+                    ball.state = 'GOING_UP';
+                    ball.hasBouncedThisPass = false;
+                    ball.bounceY = tableGeo.y + tableGeo.height * 0.15 + Math.random() * (tableGeo.height * 0.25);
+                }
+            }
+
+            // Map actual height factor to flat drawing scale
+            ball.scale = 1.0 + (ball.z / 45);
+        }
+
+        // ========================================================
+        // ========================================================
+        function triggerDandelionImpact(bx, by) {
+            // Reduced impact range to trigger fewer letters per bounce (more legible!)
+            const impactRadius = tableGeo.width * 0.12; 
+
+            characters.forEach(char => {
+                const dx = char.origX - bx;
+                const dy = char.origY - by;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < impactRadius) {
+                    // Transition to Dandelion scattering mode
+                    char.state = 'SCATTERED';
+                    // Dispersal power varies depending on distance to impact center
+                    const power = (1.0 - dist / impactRadius) * 6;
+                    const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.4;
+
+                    char.vx = Math.cos(angle) * power + (Math.random() - 0.5) * 1.5;
+                    char.vy = Math.sin(angle) * power - 0.8; // Mild upward launch factor
+                    char.angularVelocity = (Math.random() - 0.5) * 0.15;
+                    char.scatterTimer = 150 + Math.random() * 100; // Drifts freely for 2.5 - 4 seconds
+                }
+            });
+        }
+
+        function updateCharacters(time) {
+            characters.forEach(char => {
+                if (char.state === 'STATIC') {
+                    // Idle state
+                    char.x = char.origX;
+                    char.y = char.origY;
+                    char.angle = 0;
+                } 
+                else if (char.state === 'SCATTERED') {
+                    // Physics integration for free floating dandelion seeds
+                    char.x += char.vx;
+                    char.y += char.vy;
+                    char.angle += char.angularVelocity;
+
+                    // Light air drag
+                    char.vx *= 0.96;
+                    char.vy *= 0.96;
+
+                    // Apply continuous micro noise wave mimicking environmental wind currents
+                    char.vx += Math.sin(time * 0.03 + char.randomWindOffset) * 0.05;
+                    char.vy += Math.cos(time * 0.02 + char.randomWindOffset) * 0.03;
+
+                    char.scatterTimer--;
+                    if (char.scatterTimer <= 0) {
+                        char.state = 'RETURNING';
+                        char.returnProgress = 0;
+                    }
+                } 
+                else if (char.state === 'RETURNING') {
+                    // Smooth easing transition to return home
+                    char.returnProgress += 0.015;
+                    
+                    // Linear interpolation with strong deceleration
+                    const speedMultiplier = 0.04;
+                    const dx = char.origX - char.x;
+                    const dy = char.origY - char.y;
+                    
+                    char.x += dx * speedMultiplier;
+                    char.y += dy * speedMultiplier;
+                    
+                    // Slowly rotate back to aligned vertical orientation
+                    char.angle += (0 - char.angle) * 0.05;
+
+                    // Snap tightly back to original coordinate mapping upon arrival
+                    if (Math.sqrt(dx * dx + dy * dy) < 0.5) {
+                        char.x = char.origX;
+                        char.y = char.origY;
+                        char.angle = 0;
+                        char.state = 'STATIC';
+                    }
+                }
+            });
+        }
+
+        // ========================================================
+        // ========================================================
+        function draw(time) {
+            // 1. Clean environment fill
+            ctx.fillStyle = state.bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. High-precision Flat Ping-pong Table
+            ctx.fillStyle = state.tableColor;
+            ctx.fillRect(tableGeo.x, tableGeo.y, tableGeo.width, tableGeo.height);
+
+            // Thicker white outer rim (Enhanced flat outline visibility)
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(tableGeo.x, tableGeo.y, tableGeo.width, tableGeo.height);
+
+            // Minimalist white net boundary strip - extending slightly beyond edges of table
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            const netExtension = tableGeo.width * 0.04; // Extends out of table edges by 4%
+            ctx.moveTo(tableGeo.x - netExtension, tableGeo.y + tableGeo.height / 2);
+            ctx.lineTo(tableGeo.x + tableGeo.width + netExtension, tableGeo.y + tableGeo.height / 2);
+            ctx.stroke();
+
+            // 3. Render Letters
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            characters.forEach(char => {
+                ctx.save();
+                ctx.translate(char.x, char.y);
+                ctx.rotate(char.angle);
+
+                if (char.state !== 'STATIC') {
+                    // Floating active dandelion state: Keep same thin font-weight but color changes
+                    ctx.fillStyle = state.charActiveColor;
+                    ctx.font = `normal 200 ${char.fontSize}px system-ui, -apple-system, sans-serif`;
+                } else {
+                    // Normal static state: Thin font-weight and primary letter color
+                    ctx.fillStyle = state.charColor;
+                    ctx.font = `normal 200 ${char.fontSize}px system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif`;
+                }
+
+                ctx.fillText(char.char, 0, 0);
+                ctx.restore();
+            });
+
+            // 4. Draw Ball Shadow (Strictly Flat, Unblurred, Offset)
+            const shadowX = ball.x + 5;
+            const shadowY = ball.y + 12; // Static offset
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)'; // Semitransparent solid shadow
+            ctx.beginPath();
+            ctx.arc(shadowX, shadowY, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 5. Draw Solid Flat Ball
+            const drawnRadius = ball.radius * ball.scale;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y - ball.z, drawnRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Contrast outline
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // ========================================================
+        // ========================================================
+        let globalTime = 0;
+        function loop() {
+            globalTime++;
+            updateBallPhysics();
+            updateCharacters(globalTime);
+            draw(globalTime);
+            requestAnimationFrame(loop);
+        }
+
+        // UI Panel Toggling
+        togglePanelBtn.addEventListener('click', () => {
+            state.panelVisible = !state.panelVisible;
+            if (state.panelVisible) {
+                controlPanel.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-2');
+                controlPanel.classList.add('opacity-100', 'translate-y-0');
+            } else {
+                controlPanel.classList.add('opacity-0', 'pointer-events-none', '-translate-y-2');
+                controlPanel.classList.remove('opacity-100', 'translate-y-0');
+            }
+        });
+
+        // Config updates
+        function updateBgColor(color) {
+            state.bgColor = color;
+            bgColorPicker.value = color;
+        }
+        function updateTableColor(color) {
+            state.tableColor = color;
+            tableColorPicker.value = color;
+        }
+
+        bgColorPicker.addEventListener('input', (e) => updateBgColor(e.target.value));
+        tableColorPicker.addEventListener('input', (e) => updateTableColor(e.target.value));
+        
+        charColorPicker.addEventListener('input', (e) => {
+            state.charColor = e.target.value;
+        });
+
+        charActiveColorPicker.addEventListener('input', (e) => {
+            state.charActiveColor = e.target.value;
+        });
+
+        ballSpeedSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            state.ballSpeed = val;
+            speedValSpan.textContent = val.toFixed(1);
+            if (ball.vy > 0) ball.vy = state.ballSpeed;
+            else ball.vy = -state.ballSpeed;
+        });
+
+        ballRadiusSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            state.ballRadius = val;
+            radiusValSpan.textContent = `${val.toFixed(1)}px`;
+            ball.radius = val;
+        });
+
+        tableWidthSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            state.tableWidth = val;
+            tableWidthValSpan.textContent = `${val}px`;
+            // Instant adaptive layout update
+            const rect = canvas.getBoundingClientRect();
+            calculateTableDimensions(rect.width, rect.height);
+            initLetterText();
+            resetBall();
+        });
+
+        document.querySelectorAll('.bg-picker').forEach(btn => {
+            btn.addEventListener('click', () => updateBgColor(btn.dataset.color));
+        });
+        document.querySelectorAll('.table-picker').forEach(btn => {
+            btn.addEventListener('click', () => updateTableColor(btn.dataset.color));
+        });
+
+        // Apply changes
+        applyTextBtn.addEventListener('click', () => {
+            state.textTop = document.getElementById('textTopInput').value;
+            state.textBottom = document.getElementById('textBottomInput').value;
+            initLetterText();
+            resetBall();
+        });
+
+        // Perfect boot sequence
+        window.onload = function() {
+            resizeCanvas();
+            resetBall();
+            loop();
+        };
+    </script>
+</body>
+</html>
