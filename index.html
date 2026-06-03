@@ -105,7 +105,7 @@
                     </div>
                     <div class="flex items-center gap-1">
                         <input type="color" id="charActiveColorPicker" value="#fde047" class="w-6 h-6 p-0 bg-transparent border-0 cursor-pointer rounded overflow-hidden">
-                        <span class="text-[10px] text-white/50">活跃状态</span>
+                        <span class="text-[10px] text-white/50">飞舞状态</span>
                     </div>
                 </div>
             </div>
@@ -199,7 +199,7 @@
             planeSizeVariance: 0.3, 
             panelVisible: true,
             customPlaneImage: null,
-            // 极简中国风纤细叙事信件
+            // 写给莎莎的手写精细纤细信
             textTop: "亲爱的莎莎姐姐：\n每当在电视机前看到你握紧球拍、眼神专注的样子，我都会忍不住为你欢呼。你的正手拉球像闪电一样快，每一次绝境中微笑着挥拍，都深深鼓舞着我。你是我心中最闪亮的超级英雄。",
             textBottom: "在平时的训练里，每当我觉得累了、想要放弃的时候，爸爸就会告诉我要学习你的坚韧与勇敢。我会一直努力练习，带着对乒乓球的热爱坚持下去。希望有一天，我也能像你一样为国争光。祝你每天都开开心心！\n—— 崇拜你的小球手"
         };
@@ -243,6 +243,48 @@
             ratio: 1.8 
         };
 
+        // ========================================================
+        // 性能提升：离线 Canvas 预渲染技术（纸飞机缓存精灵）
+        // ========================================================
+        let planeCacheCanvas = null;
+        let planeCacheCtx = null;
+        const PLANE_CACHE_SIZE = 64; 
+
+        function updatePlaneCache() {
+            if (!planeCacheCanvas) {
+                planeCacheCanvas = document.createElement('canvas');
+                planeCacheCtx = planeCacheCanvas.getContext('2d');
+            }
+            planeCacheCanvas.width = PLANE_CACHE_SIZE;
+            planeCacheCanvas.height = PLANE_CACHE_SIZE;
+            
+            const pCtx = planeCacheCtx;
+            pCtx.clearRect(0, 0, PLANE_CACHE_SIZE, PLANE_CACHE_SIZE);
+            
+            pCtx.save();
+            pCtx.translate(PLANE_CACHE_SIZE / 2, PLANE_CACHE_SIZE / 2);
+            
+            const s = PLANE_CACHE_SIZE * 0.4;
+            pCtx.beginPath();
+            pCtx.moveTo(s * 0.5, 0);
+            pCtx.lineTo(-s * 0.4, -s * 0.3);
+            pCtx.lineTo(-s * 0.1, 0);
+            pCtx.lineTo(-s * 0.4, s * 0.3);
+            pCtx.closePath();
+            pCtx.fillStyle = state.charActiveColor;
+            pCtx.fill();
+
+            // 精美的折纸中轴脊线
+            pCtx.beginPath();
+            pCtx.moveTo(s * 0.5, 0);
+            pCtx.lineTo(-s * 0.1, 0);
+            pCtx.strokeStyle = 'rgba(0,0,0,0.18)';
+            pCtx.lineWidth = 1.2;
+            pCtx.stroke();
+            
+            pCtx.restore();
+        }
+
         function resizeCanvas() {
             const rect = canvas.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
@@ -256,6 +298,7 @@
             
             calculateTableDimensions(rect.width, rect.height);
             initLetterText();
+            updatePlaneCache();
         }
 
         function calculateTableDimensions(winWidth, winHeight) {
@@ -276,7 +319,7 @@
         window.addEventListener('resize', resizeCanvas);
 
         // ========================================================
-        // 字符排版与初始化
+        // 字符网格排版系统
         // ========================================================
         let characters = []; 
 
@@ -287,8 +330,7 @@
             
             const fontSize = Math.max(10, Math.min(tableGeo.width / 22, 14));
             
-            // 采用极细（Font weight: 200）保证无衬线字体的骨骼清秀感
-            ctx.font = `normal 200 ${fontSize}px system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "PingFang SC", "Source Han Sans CN", "Microsoft YaHei", sans-serif`;
+            ctx.font = `normal 200 ${fontSize}px system-ui, -apple-system, "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif`;
             const lineHeight = fontSize * 1.5;
 
             // 绘制上半文本 (0.05 至 0.43 比例区间)
@@ -309,6 +351,7 @@
                     return;
                 }
 
+                // 拆分出中文字符、英文字词及标点
                 const tokens = [];
                 const regex = /[\u4e00-\u9fa5]|[a-zA-Z0-9']+|[^\s\w\u4e00-\u9fa5]|\s+/g;
                 let match;
@@ -407,10 +450,13 @@
                 randomWindOffset: Math.random() * 100,
 
                 planeScaleMult: 1.0,  
-                planeAlphaMult: 1.0,
+                planeAlphaMult: 1.0,  
 
-                // 局部受击打高频弹性瞬间变形
-                hitProgress: 0,  // 0 -> 1 极速衰减阻尼
+                curveDriftFactor: (Math.random() - 0.5) * 0.08, 
+                glideDestination: { x: 0, y: 0 },              
+                
+                // 局部受击物理及延迟蓄力参数
+                hitProgress: 0,  
                 hitAngle: 0,
                 offsetX: 0,
                 offsetY: 0,
@@ -523,52 +569,58 @@
             ball.scale = 1.0 + (ball.z / 45);
         }
 
-        // 核心亮点：球体落台时，“蒲公英式”全角度优雅地在原地局部炸裂飞散（不乱，飞得近，可快速回归）
+        // ========================================================
+        // 🌟 核心调优：小球撞击瞬间零延迟蒲公英激落爆散系统 🌟
+        // ========================================================
         function triggerDandelionImpact(bx, by) {
-            const impactRadius = tableGeo.width * 0.15; 
+            // 🎯 极致收缩受击圆形范围至最舒适比例 (宽度 11%)，使整体画面干净而不凌乱
+            const impactRadius = tableGeo.width * 0.11; 
 
             characters.forEach(char => {
                 const dx = char.origX - bx;
                 const dy = char.origY - by;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist < impactRadius) {
+                // 只波及静态或者正准备归巢的文字，在物理触地的一刹那立刻激落
+                if (dist < impactRadius && (char.state === 'STATIC' || char.state === 'RETURNING')) {
                     char.state = 'SCATTERED';
-                    char.isPlaneType = false; // 白球撞击仅以纤细字符形态飞散，不变成飞机
+                    char.isPlaneType = false; // 白球击中触发纯文字唯美喷落，不变成纸飞机
 
-                    // 1. 完美的 360° 全向蒲公英炸开方向
+                    // 1. 瞬间点亮活跃颜色，并放大 1.25x (提供清脆的瞬间打击爽快感)
+                    char.hitProgress = 1.0; 
+                    char.hitScale = 1.25; 
+
+                    // 2. 完美的 360° 放射状爆散方向，从击中爆心处依次射出
                     const angle = Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.25;
-
-                    // 2. 局部受撞击产生的高频振颤动能，以及极其克制雅致的飞逸力度
-                    const intensity = (1.0 - dist / impactRadius);
-                    char.hitProgress = intensity; // 赋予受击膨胀尺度
                     char.hitAngle = angle;
 
-                    // 3. 克制温和的初速度，让粒子脱离原位但飞散得很近
-                    const power = intensity * 2.2 + 0.8; 
+                    // 3. 极速响应飞逸力道，保证清脆的瞬时物理弹出反馈，越靠近落点初速越强
+                    const intensity = 1.0 - (dist / impactRadius);
+                    const power = intensity * 4.8 + 1.6; // 强烈且清脆的爆发速度
+
                     char.vx = Math.cos(angle) * power;
-                    char.vy = Math.sin(angle) * power - 0.4; // 柔和浮空力
-                    char.angularVelocity = (Math.random() - 0.5) * 0.05; 
-                    char.scatterTimer = 80 + Math.random() * 40; // 在空中优雅停留短暂时间即行归巢
+                    char.vy = Math.sin(angle) * power - 0.6; // 附加微弱向上的空气浮力
+                    char.angularVelocity = (Math.random() - 0.5) * 0.15; // 狂乱翻转角
+                    char.scatterTimer = 110 + Math.random() * 50; // 空中优雅旋停周期
                 }
             });
         }
 
         // ========================================================
-        // 字符及纸飞机物理姿态更新
+        // 字符与纸飞机物理姿态更新（Craig Reynolds 转向行为 + 跨网航线 & 弧线模拟）
         // ========================================================
         function updateCharacters(time) {
             characters.forEach(char => {
-                // 1. 更新局部受击弹性振颤位移 (不影响 STATIC 字符，但为受击瞬间增加微量物理张力)
+                // 1. 局部高频颤动与膨胀快速衰减复位
                 if (char.hitProgress > 0) {
                     char.hitProgress -= 0.038; 
                     if (char.hitProgress < 0) char.hitProgress = 0;
-                    char.hitScale = 1.0 + 0.3 * char.hitProgress; // 击中瞬间膨胀放大
+                    char.hitScale = 1.0 + 0.3 * char.hitProgress; 
                 } else {
                     char.hitScale = 1.0;
                 }
 
-                // 2. 状态机物理计算
+                // 2. 主状态机
                 if (char.state === 'STATIC') {
                     char.x = char.origX;
                     char.y = char.origY;
@@ -587,7 +639,25 @@
                     }
 
                     const speed = Math.sqrt(char.vx * char.vx + char.vy * char.vy);
+                    
                     if (char.isPlaneType) {
+                        // 纸飞机空气侧偏力矩（模拟弧线滑翔轨迹）
+                        const curveForceX = -char.vy * char.curveDriftFactor * state.planeSpeedFactor;
+                        const curveForceY = char.vx * char.curveDriftFactor * state.planeSpeedFactor;
+                        char.vx += curveForceX;
+                        char.vy += curveForceY;
+
+                        // 向目的地牵引
+                        const targetDx = char.glideDestination.x - char.x;
+                        const targetDy = char.glideDestination.y - char.y;
+                        const targetDist = Math.sqrt(targetDx * targetDx + targetDy * targetDy) || 1;
+                        
+                        if (targetDist > 15) {
+                            char.vx += (targetDx / targetDist) * 0.08 * state.planeSpeedFactor;
+                            char.vy += (targetDy / targetDist) * 0.08 * state.planeSpeedFactor;
+                        }
+
+                        // 机头角丝滑指向当前速度矢量 (绝不原地打转)
                         if (speed > 0.4) {
                             const targetAngle = Math.atan2(char.vy, char.vx);
                             let angleDiff = targetAngle - char.angle;
@@ -599,18 +669,21 @@
                             char.angle += angleDiff * 0.04;
                         }
 
+                        // 空中滑行微弱升力
                         const lift = speed * 0.06;
                         char.vy -= lift * 0.12; 
                     } else {
+                        // 蒲公英散射普通字体的轻柔滚动旋转
                         char.angle += char.angularVelocity;
                     }
 
+                    // 微弱环境风阻扰动
                     const wave = Math.sin(time * 0.03 + char.randomWindOffset) * 0.12;
                     char.vx += -Math.sin(char.angle) * wave;
                     char.vy += Math.cos(char.angle) * wave;
 
-                    // 白球撞击字符具有更高的摩擦阻尼，使其绝不失控飘散过远
-                    const friction = char.isPlaneType ? 0.982 : 0.95;
+                    // 白球散落字符有较强空气摩擦，使其在空中徐徐漂流减速；纸飞机摩擦阻力极低，能飞得更遥远
+                    const friction = char.isPlaneType ? 0.988 : 0.955;
                     char.vx *= friction;
                     char.vy *= friction;
 
@@ -633,9 +706,9 @@
                     const dy = char.origY - char.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
 
-                    if (dist < 12) {
-                        // 临近着落区，软着陆
-                        const easeFactor = 0.06;
+                    if (dist < 15) {
+                        // 软着陆对齐
+                        const easeFactor = 0.07;
                         char.x += dx * easeFactor;
                         char.y += dy * easeFactor;
                         char.vx *= 0.8;
@@ -654,12 +727,12 @@
                             char.isPlaneType = false;
                         }
                     } else {
-                        // 经典 Steering Behavior，自然优雅划出弧线弯度前行回家
-                        const cruiseSpeed = (char.isPlaneType ? 3.8 : 2.5) * state.planeSpeedFactor; 
+                        // 转向力学 (Steering Behavior)：顺滑画弧弯道前行，不生硬直接回拉
+                        const cruiseSpeed = (char.isPlaneType ? 4.2 : 2.8) * state.planeSpeedFactor; 
                         const desiredVx = (dx / dist) * cruiseSpeed;
                         const desiredVy = (dy / dist) * cruiseSpeed;
 
-                        const steerStrength = char.isPlaneType ? 0.035 : 0.05; 
+                        const steerStrength = char.isPlaneType ? 0.038 : 0.055; 
                         char.vx += (desiredVx - char.vx) * steerStrength;
                         char.vy += (desiredVy - char.vy) * steerStrength;
 
@@ -671,7 +744,7 @@
                             const targetAngle = Math.atan2(char.vy, char.vx);
                             let angleDiff = targetAngle - char.angle;
                             angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-                            char.angle += angleDiff * 0.09; 
+                            char.angle += angleDiff * 0.1; 
                         }
                     }
                 }
@@ -679,7 +752,7 @@
         }
 
         // ========================================================
-        // 极速双渲染通道
+        // 极速双渲染通道 (批量渲染提升 + 缓存绘制)
         // ========================================================
         function draw(time) {
             // 背景
@@ -690,12 +763,12 @@
             ctx.fillStyle = state.tableColor;
             ctx.fillRect(tableGeo.x, tableGeo.y, tableGeo.width, tableGeo.height);
 
-            // 边缘线
+            // 加粗纯白色球桌边线
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 6;
             ctx.strokeRect(tableGeo.x, tableGeo.y, tableGeo.width, tableGeo.height);
 
-            // 伸出边界的球网线
+            // 拟真长网线
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -704,7 +777,7 @@
             ctx.lineTo(tableGeo.x + tableGeo.width + netExtension, tableGeo.y + tableGeo.height / 2);
             ctx.stroke();
 
-            // 绘制字符
+            // 绘制字符与纸飞机
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
@@ -712,7 +785,7 @@
                 const textOpacity = 1 - char.morphProgress;
                 const planeOpacity = char.morphProgress;
 
-                // 超高效零开销渲染：在原地静止且无受击放大时，不开启 context 矩阵变换直接高速写字，消除卡顿
+                // 🌟 核心极速通道：跳过普通状态矩阵变换
                 if (char.state === 'STATIC' && char.hitScale === 1) {
                     ctx.fillStyle = state.charColor;
                     ctx.font = `normal 200 ${char.fontSize}px system-ui, -apple-system, sans-serif`;
@@ -720,7 +793,7 @@
                     return;
                 }
 
-                // 活动或振颤节点：应用 3D 矩阵混合变换
+                // 运动活动节点混合绘制
                 ctx.save();
                 ctx.translate(char.x, char.y);
                 ctx.rotate(char.angle);
@@ -729,24 +802,21 @@
                     ctx.scale(char.hitScale, char.hitScale);
                 }
 
-                // 1. 文本部分绘制
+                // 1. 文本形态渲染
                 if (textOpacity > 0.01) {
                     ctx.save();
                     ctx.globalAlpha = textOpacity;
-                    
-                    // 活动或抖动态亮起活跃色
                     if (char.state !== 'STATIC' || char.hitProgress > 0) {
                         ctx.fillStyle = state.charActiveColor;
                     } else {
                         ctx.fillStyle = state.charColor;
                     }
-                    
                     ctx.font = `normal 200 ${char.fontSize}px system-ui, -apple-system, sans-serif`;
                     ctx.fillText(char.char, 0, 0);
                     ctx.restore();
                 }
 
-                // 2. 纸飞机部分绘制
+                // 2. 纸飞机形态渲染 (离线缓存贴图)
                 if (planeOpacity > 0.01) {
                     ctx.save();
                     ctx.globalAlpha = planeOpacity * char.planeAlphaMult;
@@ -762,21 +832,11 @@
                             planeSize
                         );
                     } else {
-                        ctx.beginPath();
-                        ctx.moveTo(planeSize * 0.5, 0);
-                        ctx.lineTo(-planeSize * 0.4, -planeSize * 0.3);
-                        ctx.lineTo(-planeSize * 0.1, 0);
-                        ctx.lineTo(-planeSize * 0.4, planeSize * 0.3);
-                        ctx.closePath();
-                        ctx.fillStyle = state.charActiveColor;
-                        ctx.fill();
-
-                        ctx.beginPath();
-                        ctx.moveTo(planeSize * 0.5, 0);
-                        ctx.lineTo(-planeSize * 0.1, 0);
-                        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-                        ctx.lineWidth = 0.8;
-                        ctx.stroke();
+                        ctx.drawImage(
+                            planeCacheCanvas,
+                            0, 0, PLANE_CACHE_SIZE, PLANE_CACHE_SIZE,
+                            -planeSize / 2, -planeSize / 2, planeSize, planeSize
+                        );
                     }
                     ctx.restore();
                 }
@@ -838,7 +898,10 @@
         }
 
         bgColorPicker.addEventListener('input', (e) => updateBgColor(e.target.value));
-        tableColorPicker.addEventListener('input', (e) => updateTableColor(e.target.value));
+        tableColorPicker.addEventListener('input', (e) => {
+            updateTableColor(e.target.value);
+            updatePlaneCache();
+        });
         
         charColorPicker.addEventListener('input', (e) => {
             state.charColor = e.target.value;
@@ -846,6 +909,7 @@
 
         charActiveColorPicker.addEventListener('input', (e) => {
             state.charActiveColor = e.target.value;
+            updatePlaneCache(); 
         });
 
         ballSpeedSlider.addEventListener('input', (e) => {
@@ -889,7 +953,10 @@
             btn.addEventListener('click', () => updateBgColor(btn.dataset.color));
         });
         document.querySelectorAll('.table-picker').forEach(btn => {
-            btn.addEventListener('click', () => updateTableColor(btn.dataset.color));
+            btn.addEventListener('click', () => {
+                updateTableColor(btn.dataset.color);
+                updatePlaneCache();
+            });
         });
 
         planeImageUpload.addEventListener('change', (e) => {
@@ -918,7 +985,7 @@
             clearPlaneImageBtn.classList.add('hidden');
         });
 
-        // 监听画布点击：所有字符全向呈烟花放射绽放，并部分（黄金占比 22%）幻化为纸飞机
+        // 监听画布点击：全场大绽放！约 22% 字符幻化为超长航线、大弧向的折纸飞机越网飞越对侧
         canvas.addEventListener('pointerdown', (e) => {
             if (e.target !== canvas) return;
 
@@ -926,16 +993,25 @@
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
 
+            const tableCenterY = tableGeo.y + tableGeo.height / 2;
+
             characters.forEach(char => {
                 char.state = 'SCATTERED';
                 
-                // 部分幻化，显现高级感的点缀效果，不全盘化作飞机
                 char.isPlaneType = Math.random() < 0.22; 
-                
                 char.planeScaleMult = 1.0 + (Math.random() - 0.5) * state.planeSizeVariance * 2;
-                char.planeAlphaMult = 0.5 + Math.random() * 0.5;
+                char.planeAlphaMult = 0.55 + Math.random() * 0.45;
 
-                // 全向发射烟花路径
+                // 长程对侧目的地
+                const isCharOnTop = (char.origY < tableCenterY);
+                char.glideDestination = {
+                    x: tableGeo.x + Math.random() * tableGeo.width,
+                    y: isCharOnTop 
+                        ? (tableCenterY + Math.random() * (tableGeo.height * 0.45)) 
+                        : (tableGeo.y + Math.random() * (tableGeo.height * 0.45))
+                };
+
+                // 全向大爆炸速度
                 const dx = char.x - clickX;
                 const dy = char.y - clickY;
                 const dist = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -944,14 +1020,17 @@
                 const maxDist = Math.max(canvas.width, canvas.height);
                 const proximityFactor = Math.max(0.15, 1.1 - dist / (maxDist * 0.45));
                 
-                const basePower = (4.5 + Math.random() * 6.5) * state.planeSpeedFactor; 
+                const basePower = (char.isPlaneType ? 7.5 : 4.5 + Math.random() * 4.5) * state.planeSpeedFactor; 
                 const power = basePower * proximityFactor;
 
                 char.vx = Math.cos(angle) * power;
-                char.vy = Math.sin(angle) * power - 0.4 * state.planeSpeedFactor; 
-                char.angularVelocity = (Math.random() - 0.5) * 0.04; 
+                char.vy = Math.sin(angle) * power - 0.5 * state.planeSpeedFactor; 
+                char.angularVelocity = (Math.random() - 0.5) * 0.15; 
                 
-                char.scatterTimer = 160 + Math.random() * 100;
+                char.scatterTimer = char.isPlaneType 
+                    ? (260 + Math.random() * 160) 
+                    : (120 + Math.random() * 60);  
+                
                 char.morphProgress = 0; 
                 char.angle = angle; 
             });
